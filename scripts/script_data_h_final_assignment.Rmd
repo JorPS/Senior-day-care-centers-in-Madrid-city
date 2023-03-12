@@ -1,0 +1,497 @@
+---
+title: "script_data_h_final"
+author: "Raquel"
+date: "2023-03-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries 
+
+```{r cars}
+library(xml2)
+library(httr)
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+library(magrittr)
+library(readr)
+library(stringi)
+library(mapSpain)
+library(ggplot2)
+
+```
+
+# User agent
+
+```{r}
+set_config(
+  user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36")
+)
+```
+
+# URLs
+
+```{r}
+url_priv <- "https://www.inforesidencias.com/centros/buscador/centros-de-dia-para-mayores/madrid/madrid/madrid"
+
+url_publ <- "https://www.comunidad.madrid/servicios/asuntos-sociales/centros-mayores"
+
+
+priv_raw <-  read_html(url_priv) 
+
+publ_raw <-  read_html(url_publ) 
+```
+
+# Create Private dataframe
+
+Get a group of every url with the addresses of the centers
+
+```{r}
+x <- "https://www.inforesidencias.com/centros/buscador/centros-de-dia-para-mayores/madrid/madrid/madrid?page=2"
+url_group <- c(x, x, x, x, x, x, x, x, x, x, x, x, x, x)
+url_group <- str_remove(url_group, pattern = "2")
+url_group <- paste0(url_group, c(2:15))
+url_group <- c(url_priv, url_group)
+url_group
+```
+
+Extract the address of every url link.
+
+```{r}
+
+address_vector <- c(url_priv)
+extract_address <- function(x) {
+  Sys.sleep(5)
+html_priv <-  read_html(x) %>% xml_child()
+y <- html_priv %>% 
+  xml_find_all("//address") %>% 
+  xml_text()
+}
+
+private_dayc <- map(url_group, extract_address)
+private_dayc
+
+```
+
+Transform into a dataframe
+
+```{r}
+df_priv <- as.data.frame(private_dayc)
+
+df_priv <- data.frame(newcol = c(t(df_priv)), stringsAsFactors=FALSE)
+
+```
+
+Clean to standardize
+
+```{r}
+cdf_priv <- df_priv %>% 
+  transmute(ADDRESS = toupper(newcol)) %>% 
+  mutate(ADDRESS = str_remove(ADDRESS, "\n ")) %>% 
+  mutate(ADDRESS = str_remove(ADDRESS, "C/")) %>% 
+  mutate(ADDRESS = str_remove(ADDRESS, "\\.")) %>% 
+  # remove street class
+  mutate(ADDRESS = str_remove(ADDRESS, "CALLE|PLAZA|AVDA.|AV |AVENIDA|PASEO|BULV|GLORIETA DE LOS|PASEO DE LA|CTRA.|CTRA DE|CTRA. DE")) %>% 
+  # remove postal code
+  mutate(ADDRESS = str_remove(ADDRESS, "\\d\\d\\d\\d\\d")) %>% 
+  # remove city info
+  mutate(ADDRESS = str_extract(ADDRESS, ".+\\d+|.+S/N|.+,")) %>% 
+  # Number column, Address name column, is private? column (PRIV)
+  transmute(NUMBER = str_extract(ADDRESS, "\\d+"),
+         NOMBRE = str_remove(ADDRESS, "\\d+")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, " NO"),
+         NOMBRE = str_remove(NOMBRE, ",|S/N"),
+         PRIV = 1) %>% 
+  mutate(NOMBRE = str_remove_all(NOMBRE, "\\.")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, "-\\d+")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, "\\(.+")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, ",")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, "Nº")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, " 3 5 Y 6")) %>% 
+  mutate(NOMBRE = str_remove(NOMBRE, "LCAL")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE LA DIRECCIÓN", "DIRECCIÓN")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE VILLAVERDE A", "VILLAVERDE A")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "LA ISLA DE CUBA", "ISLA DE CUBA")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "ISLA DE LA", "ISLA DE")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE TALLERES", "TALLERES"))%>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE TALLERES", "TALLERES"))%>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE PORTUGAL", "PORTUGAL"))%>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE LA HABANA", "LA HABANA"))%>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE CANILLAS", "CANILLAS"))%>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE PALAFOX", "PALAFOX"))%>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DE CÓRDOBA", "CÓRDOBA"))%>%
+  mutate(NOMBRE = str_replace(NOMBRE, "ADE SAINZ", "ALCALDE SAINZ"))%>%
+  mutate(NOMBRE = str_replace(NOMBRE, "CÁRMENES", "LOS CÁRMENES"))%>%
+  mutate(NOMBRE = str_replace(NOMBRE, "PEÑASCALES", "LOS PEÑASCALES"))%>%
+  mutate(NOMBRE = str_replace(NOMBRE, "JOSÉ JIMÉNEZ", "JOSÉ JIMÉNEZ MARTÍN"))%>%
+  mutate(NOMBRE = str_remove(NOMBRE, "TRAVESERA "))%>%
+  mutate(NOMBRE = str_replace(NOMBRE, " SRA ", " SEÑORA ")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "GRAL", "GENERAL")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "PÉREZ AYALA", "PÉREZ DE AYALA")) %>% 
+  mutate(NOMBRE = str_replace(NOMBRE, "DR", "DOCTOR")) %>% 
+  mutate(NOMBRE = str_squish(NOMBRE))  %>% 
+  mutate(NUMBER = replace_na(NUMBER, "2")) %>% 
+  mutate(NOMBRE = stri_trans_general(NOMBRE,"Latin-ASCII"))
+
+
+cdf_priv
+```
+
+# Create Public dataframe
+
+Get the public centers URLs
+
+```{r pressure}
+
+mainurl <- "https://www.comunidad.madrid/"#all senior day care center webpages where the direction info is, starts with this main url
+
+url_publ <- publ_raw  %>%
+  xml_find_all("//h3/a[@href ]")%>% xml_attr(attr = "href")
+#to avoid the vector elements that are not the end of links 
+url_publ <- url_publ[4:35]
+
+#a loop to paste the beginning of the link stored as main url to the different ends of the link stored in url_publ
+for (i in 1:length(url_publ)) {
+  url_publ[i] <- paste0(mainurl, url_publ[i])
+}
+
+url_publ
+
+```
+
+ Extract public daycare centers addresses
+
+```{r}
+
+function_name <- function(x, y){ 
+  Sys.sleep(5)
+  x <- read_html(x)
+  y <- x %>% xml_find_all("//span[@property = 'schema:streetAddress']//p")%>% xml_text()
+  print(y)}
+
+# Loop for the 32 urls
+results_list <- list()
+
+for (i in seq_along(url_publ)) {
+  url <- url_publ[i]
+  result <- function_name(url)
+  results_list[[i]] <- result
+}
+
+print(results_list)
+
+```
+
+Transform the results to data frame
+
+```{r}
+
+df_publ <- as.data.frame(results_list)
+
+df_publ <- data.frame(newcol = c(t(df_publ)), stringsAsFactors=FALSE)
+
+df_publ <- head(df_publ, 32)
+```
+
+Clean dataframe: Street name & Number in different columns
+
+```{r}
+# Change to capital letters to fit el callejero dataframe
+
+df_publ <- df_publ%>% mutate(newcol=toupper(newcol))
+
+#Separate a 'Clase' column with Calle, Avenida... information to match El Callejero 
+
+df_publ <- df_publ %>% 
+  mutate(CLASE = str_extract(df_publ$newcol, "^[A-Z]+(?=\\s)|C/|AVDA."))%>%
+  mutate(CLASE = str_replace(CLASE, "C/", "CALLE"))%>%#para que coincida con el callejero
+  mutate(CLASE=str_replace(CLASE, "AVDA.", "AVENIDA"))#para que coincida con el callejero
+
+#Separete the street name
+
+df_publ <- df_publ %>% 
+  #Regular expression: select every text since first blank space till fisrt coma
+  mutate(NOMBRE = str_extract(df_publ$newcol, "(?<=\\s)[^,]+"))
+  #Regular expression: remove la, las, de... from the street to fit El Callejero
+ df_publ <- df_publ %>% 
+   mutate(NOMBRE = gsub("^DE LAS|^DE LA|^DEL|^DE LOS","",NOMBRE))
+         
+  
+```
+
+Separete the number or s/n in another column
+
+```{r}
+
+
+df_publ <- df_publ %>% 
+  mutate(NUMERO_TX = str_extract(df_publ$newcol, "\\d+|S/N"))%>%
+  mutate(NUMERO_TX=str_replace(NUMERO_TX, "S/N", "1"))#in order to match El Callejero, we have changed s/n to 1, because we have guessed it is the number that most probably appears on a street
+
+```
+
+
+Create PRIV column to differenciate, between private center 1 and public center 0 
+```{r}
+df_publ <- df_publ %>% 
+  mutate(PRIV = 0)#all publics, all 0
+```
+
+Modify df_publ dataframe in order for its columns to match El Callejero colums when merged
+
+```{r}
+df_publ<- df_publ%>% 
+  mutate(NUMERO_TX=as.character(NUMERO_TX))%>%
+  mutate(NOMBRE= str_replace_all(NOMBRE, "SANTA JOAQUINA VEDRUNA",
+                             "SANTA JOAQUÍNA DE VEDRUNA"))%>%
+ mutate(NOMBRE= str_replace_all(NOMBRE, "CARMENES",
+                             "LOS CÁRMENES"))%>%
+   mutate(NOMBRE= str_replace_all(NOMBRE, "BENIMANET",
+                             "BENIMAMET"))%>%
+  mutate(NOMBRE= str_replace_all(NOMBRE, "SIERRA PALOMERAS",
+                             "SIERRA DE PALOMERAS"))
+
+
+```
+
+Load street data of Madrid from "El Callejero"
+Source: https://datos.madrid.es/portal/site/egob/menuitem.c05c1f754a33a9fbe4b2e4b284f1a5a0/?vgnextoid=b3c41f3cf6a6c410VgnVCM2000000c205a0aRCRD&vgnextchannel=374512b9ace9f310VgnVCM100000171f5a0aRCRD&vgnextfmt=default
+
+```{r}
+callejero <- read.csv("../datasets/Direcciones_vigentes2016.csv", 
+                      sep = ";",
+                      fileEncoding = "ISO-8859-1") %>% 
+  select(CLASE, NOMBRE, NUMERO_TX, starts_with("UTM"))
+
+cdf <- callejero %>%
+  mutate(NUMBER = NUMERO_TX) %>% 
+  mutate(NOMBRE = stri_trans_general(NOMBRE,"Latin-ASCII")) %>% 
+  full_join(cdf_priv, by = c("NUMBER", "NOMBRE")) %>% 
+  drop_na(PRIV) %>% 
+  select(-NUMERO_TX)
+
+cdf <- cdf[!duplicated(cdf$NOMBRE), ] 
+
+cdf
+
+```
+
+ Join df_publ dataframe to El Callejero
+ 
+```{r}
+
+df_publ_plot  <- df_publ%>%full_join(callejero, by= c("NOMBRE", "CLASE", "NUMERO_TX")) %>%
+  drop_na(PRIV)
+
+```
+
+Ciudad vs Comunidad Autónoma
+
+The scrapped webpage had all senior day care centers from Comunidad de Madrid, not from Madrid city, out of 32 centers, 13 centers are inside Comunidad de Madrid but they are not in Madrid city, therefore Madrid city only has 19 senior public day care centers
+
+```{r}
+#calle damas no está en madrid ciudad es Alcalá de Henares --ROW1
+#Plaza Orense en Fuenlabrada-- ROW 2
+#Avenida d elas naciones. Gracai Fuenlabrada --ROW 9
+#	AVDA. DE LAS CIUDADES, NÚM. 31 en Getafe-- ROW 10
+#AVENIDA DE LA MANCHA, NÚM. 33 Leganés-- ROW 11
+#	AVENIDA DEL MAR MEDITERRÁNEO, 16 Leganés-- ROW 12
+#CALLE RÍO JARAMA, S/N Leganés-- ROW 14
+#CALLE CORONADOS, NÚM. 7 Pinto-- ROW 17
+#CALLE GOBERNADOR, NÚM. 80 Aranjuez-- ROW 20
+#CALLE PADRE BLANCO, S/N C/V FERROCARRIL Getafe-- ROW 21
+#	CALLE PILAR, NÚM. 6 --ROW 27
+# SECTOR DESCUBRIDORES, NÚM. 24 Tres Cantos-- ROW 29
+#	CALLE MORALES ANTUÑANO, NÚM. 9 Collado Villalba-- ROW 32
+
+df_publ_plot  <- df_publ_plot [-c(1, 2, 9, 10, 11, 12, 14, 17, 20, 21, 27, 29, 32),]
+
+#Camarena and Humanes have duplicated rows, so we erased them in order to have jsut one row
+
+df_publ_plot  <- df_publ_plot [-c(3, 5, 9),]
+
+df_publ_plot
+
+```
+
+# Join private & public
+
+```{r}
+#Modify to join 
+df_priv_plot <- cdf %>% 
+  rename(NUMERO_TX = NUMBER) %>% 
+  mutate(PRIV = NA)#To avoid picturing public ones as private ones
+
+#Modify to join 
+df_publ_plot <- df_publ_plot%>% select(-newcol)
+
+#Join both
+df_plot <- rbind(df_publ_plot, df_priv_plot)
+
+#Somo private observations (PRIV=NA) are actually public observations (PRIV=0)
+df_plot <- df_plot [!duplicated(df_plot $NOMBRE), ]
+
+df_plot$PRIV <- df_plot$PRIV %>% replace(is.na(.), 1)
+```
+
+# Plotting results
+
+## Madrid map
+
+Prepare dataframe to plot a map remove , to put .
+ 
+```{r}
+# to drop the observations that cannot be plotted
+df_plot <- df_plot %>%  drop_na(UTMX_ETRS, UTMY_ETRS)%>%
+  mutate(UTMX_ETRS= str_replace(UTMX_ETRS, ",", "."), #to be able to transform it to                                                       numeric
+         UTMY_ETRS= str_replace(UTMY_ETRS, ",", "."))%>%
+  mutate(UTMX_ETRS= as.numeric(UTMX_ETRS),
+         UTMY_ETRS= as.numeric(UTMY_ETRS))#Transforming to numeric type to be able to work with them and sf functions
+
+#SAVE IT
+
+write.csv(cdf, file = "../datasets/df_plot")
+```
+
+Loading Madrid map
+
+```{r}
+Madrid <- esp_get_munic(munic = "Madrid", epsg = "4326") %>%
+  filter(cmun == "079") %>% 
+  # Standardizing labels
+  mutate(
+    Municipio = esp_dict_translate(name, "es")
+  )
+
+```
+
+Transforming longitude and latitude to sf in order to plot it
+
+```{r}
+df_plot  <- df_plot %>% drop_na(c(UTMX_ETRS, UTMY_ETRS))
+df_plot_sf <- st_as_sf(df_plot, coords = c("UTMX_ETRS", "UTMY_ETRS"), crs = 25830)
+
+# transform the spatial data frame into the appropriate CRS for mapspain
+df_plot_sf <- st_transform(df_plot_sf, crs = st_crs(Madrid))
+
+```
+
+Map plot of senior day care centers in Madrid
+
+```{r}
+ggplot() +
+  geom_sf(data = Madrid) +
+  geom_sf(data = df_plot_sf, aes(color = ifelse(PRIV == "0", "Public center", "Private center")), size = 1) +
+  scale_color_manual(name= "Senior day care center type", values = c("Public center" = "green", "Private center" = "red")) +
+  ggtitle("Location of senior day care centers in Madrid city")+
+  theme_minimal()+
+    theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+```
+
+
+## Bar plots
+
+Load El Callejero with the district numbers to merge it
+
+```{r}
+callejero2 <- read.csv("../datasets/Direcciones_vigentes2016.csv", 
+                      sep = ";",
+                      fileEncoding = "ISO-8859-1") %>% 
+  select(NOMBRE, DISTRITO) %>% distinct(NOMBRE, .keep_all= TRUE) %>% 
+  mutate(NOMBRE = stri_trans_general(NOMBRE, "Latin-ASCII"))
+
+df_plot2 <- df_plot%>% 
+  mutate(NOMBRE = stri_trans_general(NOMBRE, "Latin-ASCII"))
+df_plot2 <- df_plot2 %>% left_join(callejero2, by = "NOMBRE") 
+
+
+```
+
+Data cleaning
+
+```{r}
+# Tweak the dataframe to plot
+df_barplot <- df_plot2 %>% select(DISTRITO, PRIV, NOMBRE) %>% group_by(DISTRITO) %>% 
+  summarise(
+  n_centers = n_distinct(NOMBRE),
+  n_PRIV = sum(PRIV == 1),
+  n_PUBL = sum(PRIV != 1)) %>% 
+  mutate(`COD-DISTRITO` = DISTRITO) %>% 
+  select(-DISTRITO)
+
+# merge with district names
+df_parks <- read_csv2(file = "../datasets/parques-jardines-Ayto de Madrid_2023.csv") # List of parks and gardens from Ayto. de Madrid
+DISTRICT_NUM_Madrid <- df_parks %>% 
+  # select variables
+  select(DISTRITO, `COD-DISTRITO`) %>%
+  unique() %>% drop_na() %>% 
+  # introduce 'Ñ's, as they are not readen correctly 
+  mutate(DISTRITO = str_replace_all(DISTRITO, "\xd1", "Ñ")) 
+
+# add district names
+cdf_barplot <- df_barplot %>% 
+  left_join(DISTRICT_NUM_Madrid, 
+            by = "COD-DISTRITO")
+
+```
+
+Bar plots
+
+```{r}
+### Individual barplots
+## total n_centers
+barplot_total <- cdf_barplot %>%
+  arrange(desc(n_centers)) %>% # sort rows by n_centers in descending order
+  mutate(DISTRITO = fct_reorder(DISTRITO, n_centers, .desc = TRUE)) %>% 
+  ggplot(aes(x = DISTRITO, y = n_centers)) +
+  geom_segment(aes(x = DISTRITO, y = 0, xend = DISTRITO, yend = n_centers), color = "darkviolet", size = 2) +
+  coord_flip() +
+  labs(x = "", y = "Senior day care centers per district in Madrid", color = "")
+## private n_centers (cambiar)
+barplot_priv <- cdf_barplot %>%
+  arrange(desc(n_PRIV)) %>% # sort rows by n_centers in descending order
+  mutate(DISTRITO = fct_reorder(DISTRITO, n_PRIV, .desc = TRUE)) %>% 
+  ggplot(aes(x = DISTRITO, y = n_PRIV)) +
+  geom_segment(aes(x = DISTRITO, y = 0, xend = DISTRITO, yend = n_PRIV), color = "darkred", size = 2) +
+  coord_flip() +
+  labs(x = "", y = "Private senior day care centers per district in Madrid", color = "")
+## public n_centers (cambiar)
+barplot_publ <- cdf_barplot %>%
+  arrange(desc(n_PUBL)) %>% # sort rows by n_centers in descending order
+  mutate(DISTRITO = fct_reorder(DISTRITO, n_PUBL, .desc = TRUE)) %>% 
+  ggplot(aes(x = DISTRITO, y = n_PUBL)) +
+  geom_segment(aes(x = DISTRITO, y = 0, xend = DISTRITO, yend = n_PUBL), color = "lightgreen", size = 2) +
+  coord_flip() +
+  labs(x = "", y = "Public senior day care centers per district in Madrid", color = "")  
+
+barplot_total
+barplot_priv
+barplot_publ
+```
+
+```{r}
+# bar plot
+cdf_barplot %>%
+  arrange(desc(n_centers)) %>% # sort rows by n_centers in descending order
+  mutate(DISTRITO = fct_reorder(DISTRITO, n_centers, .desc = TRUE)) %>%
+  ggplot(aes(x = DISTRITO)) +
+  geom_col(aes(y = n_centers, fill = "Private centers"), width = 0.5) +
+  geom_col(aes(y = n_PUBL, fill = "Public centers"), width = 0.5) +
+  scale_fill_manual(values = c("Public centers" = "lightgreen", "Private centers" = "darkred")) +
+  labs(fill = "") +
+  labs(x = "", y = "Number of day care centers", color = "")  +
+  labs(title = "Public and Private senior day care centers per district, Madrid") +
+  scale_y_continuous(n.breaks = 13) +
+  coord_flip() 
+```
+
+
