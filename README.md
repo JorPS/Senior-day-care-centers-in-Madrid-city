@@ -1,5 +1,5 @@
 # Senior-day-care-centers-in-Madrid-city
-Data Harvesting's final assignment for the Master in Computational Social Sciences in Carlos III. This project has been made by my classmate, Raquel Sánchez-Hermosilla, and me, Jorge Pascual.
+Data Harvesting's final assignment for the Master in Computational Social Sciences in Universidad Carlos III de Madrid. This project has been made by my classmate, Raquel Sánchez-Hermosilla, and me, Jorge Pascual.
 
 Download the three folders in the same folder, which will be the main directory. This step is very important to mantain the paths of the coding. To replicate the code properly, we need to have the three folders in the main directory of RStudio.
 
