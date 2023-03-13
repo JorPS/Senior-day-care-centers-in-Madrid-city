@@ -5,7 +5,7 @@ Download the three folders in the same folder, which will be the main directory.
 
 The script works when setting the working directory to the "scripts" folder.
 
-Open scripts/script_data_h_final_assignment.Rmd, load the libraries and, if any is missing, install it with the code 'install.packages("#the name of the library that is not downloaded in your device)'
+Open scripts/script_data_h_final_assignment.Rmd, load the libraries and, if any is missing, install it with the code 'install.packages("#the name of the library that is not downloaded in your device, inside quoatation marks")'
 
 In the following chunk, set your user agent, as you can use the code for web scrapping. If you don't know which is your user agent, you can search it in google very quickly and easily. 
 
